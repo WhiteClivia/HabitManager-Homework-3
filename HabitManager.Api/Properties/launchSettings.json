@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "HabitManager.Api": {
+      "commandName": "Project",
+      "applicationUrl": "http://localhost:5187",
+      "environmentVariables": { "ASPNETCORE_ENVIRONMENT": "Development" }
+    }
+  }
+}

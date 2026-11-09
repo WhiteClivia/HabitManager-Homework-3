@@ -1,0 +1,12 @@
+<Solution>
+  <Project Path="HabitManager.Api/HabitManager.Api.csproj" />
+  <Project Path="HabitManager.Application/HabitManager.Application.csproj" />
+  <Project Path="HabitManager.Console/HabitManager.Console.csproj" />
+  <Project Path="HabitManager.Contracts/HabitManager.Contracts.csproj" />
+  <Project Path="HabitManager.Domain/HabitManager.Domain.csproj" />
+  <Project Path="HabitManager.Infrastructure/HabitManager.Infrastructure.csproj" />
+  <Project Path="HabitManager.Mobile/HabitManager.Mobile.csproj" Id="5010bc76-479e-43b2-879f-71b3559d56ab">
+    <Deploy Solution="Debug|*" />
+  </Project>
+  <Project Path="HabitManager.Web/HabitManager.Web.csproj" />
+</Solution>
