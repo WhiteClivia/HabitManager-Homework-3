@@ -1,17 +1,36 @@
 using HabitManager.Application;
 using HabitManager.Contracts;
 using HabitManager.Domain.Entities;
-using HabitManager.Infrastructure;
+using HabitManager.Infrastructure.Persistence;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddSingleton<IHabitRepository, InMemoryHabitRepository>();
-builder.Services.AddSingleton<HabitService>();
+var configuredPath = builder.Configuration["Database:FilePath"] ?? "App_Data/habitmanager.db";
+var databasePath = Path.GetFullPath(configuredPath, builder.Environment.ContentRootPath);
+Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
+var connectionString = new SqliteConnectionStringBuilder
+{
+    DataSource = databasePath,
+    ForeignKeys = true,
+    DefaultTimeout = 30
+}.ToString();
+builder.Services.AddDbContext<HabitDbContext>(options => options.UseSqlite(connectionString));
+builder.Services.AddScoped<IHabitRepository, SqliteHabitRepository>();
+builder.Services.AddScoped<HabitService>();
 builder.Services.AddProblemDetails();
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false)));
 
 var app = builder.Build();
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var database = scope.ServiceProvider.GetRequiredService<HabitDbContext>();
+    await DatabaseInitializer.InitializeAsync(database,
+        builder.Configuration.GetValue("Database:SeedDemoData", true));
+}
+app.Logger.LogInformation("SQLite database: {DatabasePath}", databasePath);
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 var habits = app.MapGroup("/api/habits");
@@ -20,6 +39,10 @@ habits.AddEndpointFilter(async (context, next) =>
     try
     {
         return await next(context);
+    }
+    catch (HabitStorageConflictException error)
+    {
+        return Results.Problem(detail: error.Message, statusCode: 409);
     }
     catch (HabitNotFoundException error)
     {
@@ -56,3 +79,4 @@ habits.MapDelete("/{id:guid}/completions/{date}", (Guid id, DateOnly date, Habit
     service.UndoCompletionAsync(DemoUser.Id, id, date));
 
 app.Run();
+

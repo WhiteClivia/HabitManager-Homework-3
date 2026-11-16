@@ -6,23 +6,18 @@ namespace HabitManager.Application;
 
 public sealed class HabitService(IHabitRepository repository)
 {
-    // The in-memory repository holds mutable aggregates. The singleton service
-    // serializes reads and writes, including the creation of response snapshots.
-    private readonly SemaphoreSlim _gate = new(1);
+    public async Task<HabitDto[]> ListAsync(string userId) =>
+        (await repository.ListAsync(userId)).Select(ToDto).ToArray();
 
-    public Task<HabitDto[]> ListAsync(string userId) => ExecuteAsync(async () =>
-        (await repository.ListAsync(userId)).Select(ToDto).ToArray());
+    public async Task<HabitDto> GetAsync(string userId, Guid id) =>
+        ToDto(await FindAsync(userId, id));
 
-    public Task<HabitDto> GetAsync(string userId, Guid id) => ExecuteAsync(async () =>
-        ToDto(await FindAsync(userId, id)));
-
-    public Task<HabitDto> CreateAsync(string userId, CreateHabitRequest request) =>
-        ExecuteAsync(async () =>
-        {
-            var habit = new Habit(userId, request.Name, request.Description ?? "", ToSchedule(request.Schedule));
-            await repository.SaveAsync(habit);
-            return ToDto(habit);
-        });
+    public async Task<HabitDto> CreateAsync(string userId, CreateHabitRequest request)
+    {
+        var habit = new Habit(userId, request.Name, request.Description ?? "", ToSchedule(request.Schedule));
+        await repository.SaveAsync(habit);
+        return ToDto(habit);
+    }
 
     public Task<HabitDto> UpdateAsync(string userId, Guid id, UpdateHabitRequest request) =>
         ChangeAsync(userId, id, habit =>
@@ -40,34 +35,19 @@ public sealed class HabitService(IHabitRepository repository)
     public Task<HabitDto> UndoCompletionAsync(string userId, Guid id, DateOnly date) =>
         ChangeAsync(userId, id, habit => habit.RemoveCompletion(date));
 
-    public Task<IReadOnlyCollection<HabitCompletionDto>> GetCompletionsAsync(string userId, Guid id) =>
-        ExecuteAsync<IReadOnlyCollection<HabitCompletionDto>>(async () =>
-            (await FindAsync(userId, id)).Completions.Select(ToDto).OrderByDescending(item => item.Date).ToArray());
+    public async Task<IReadOnlyCollection<HabitCompletionDto>> GetCompletionsAsync(string userId, Guid id) =>
+        (await FindAsync(userId, id)).Completions.Select(ToDto).OrderByDescending(item => item.Date).ToArray();
 
-    private Task<HabitDto> ChangeAsync(string userId, Guid id, Action<Habit> change) =>
-        ExecuteAsync(async () =>
-        {
-            var habit = await FindAsync(userId, id);
-            change(habit);
-            await repository.SaveAsync(habit);
-            return ToDto(habit);
-        });
+    private async Task<HabitDto> ChangeAsync(string userId, Guid id, Action<Habit> change)
+    {
+        var habit = await FindAsync(userId, id);
+        change(habit);
+        await repository.SaveAsync(habit);
+        return ToDto(habit);
+    }
 
     private async Task<Habit> FindAsync(string userId, Guid id) =>
         await repository.FindAsync(userId, id) ?? throw new HabitNotFoundException(id);
-
-    private async Task<T> ExecuteAsync<T>(Func<Task<T>> action)
-    {
-        await _gate.WaitAsync();
-        try
-        {
-            return await action();
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
 
     private static HabitSchedule ToSchedule(HabitScheduleDto? schedule)
     {
@@ -91,4 +71,3 @@ public sealed class HabitService(IHabitRepository repository)
     private static HabitCompletionDto ToDto(HabitCompletion completion) =>
         new(completion.Id, completion.HabitId, completion.Date);
 }
-
